@@ -9,6 +9,25 @@ import {
   createProtobufRpcClient,
 } from '@cosmjs/stargate';
 import { Tendermint37Client } from '@cosmjs/tendermint-rpc';
+import { MsgRegisterLandRegistryResponse } from "./proto/elandnode/reg/v1/tx.js";
+
+
+/**
+ * Message decoder registry
+ * Maps message type URLs to their decoder functions
+ * This is used to decode the protobuf messages returned in msgResponses
+ */
+const messageRegistry = new Map<string, (data: Uint8Array) => any>([
+  // Add your message decoders here
+  // Example: "/elandnode.reg.v1.MsgRegisterLandRegistryResponse"
+  [
+    "/elandnode.reg.v1.MsgRegisterLandRegistryResponse",
+    (data: Uint8Array) => MsgRegisterLandRegistryResponse.decode(data),
+  ],
+  // Add more message types as needed
+  // ["/module.v1.MessageType", (data) => MessageType.decode(data)],
+]);
+
 
 /**
  * Pagination parameters for querying large datasets from the blockchain
@@ -163,18 +182,27 @@ app.post('/api/upload/create-presigned', async (req, res) => {
       .status(400)
       .json({ status: 'error', message: 'signedTxHex required' });
 
-  // Broadcast the signed transaction to the blockchain
-  const result = await broadcastSignedTx(signedTxHex, {
-    service: 'upload-service',
-    action: '/enchain.upload.v1.Msg/CreateF40408',
-  });
+  try {
+    // Broadcast the signed transaction and decode message responses
+    // Pass the messageRegistry to automatically decode protobuf messages
+    const result = await broadcastSignedTx(signedTxHex, {
+      service: 'upload-service',
+      action: '/elandnode.reg.v1.MsgRegisterLandRegistry',
+    }, messageRegistry);
 
-  // Set content type and send response
-  // BigInt values are converted to strings for JSON serialization
-  res.setHeader('Content-Type', 'application/json');
-  res.send(
-    JSON.stringify(result, (_, v) => (typeof v === 'bigint' ? v.toString() : v)),
-  );
+    // Set content type and send response
+    // BigInt values are converted to strings for JSON serialization
+    res.setHeader('Content-Type', 'application/json');
+    res.send(
+      JSON.stringify(result, (_, v) => (typeof v === 'bigint' ? v.toString() : v)),
+    );
+  } catch (error: any) {
+    console.error('Error broadcasting transaction:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
 });
 
 /**
